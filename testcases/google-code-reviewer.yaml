@@ -1,0 +1,81 @@
+# ============================================================================
+# google-code-reviewer skill 測試
+# 跑法: skill-test testcases/google-code-reviewer.yaml --adapter claude --trace trace.json
+#
+# 這個 skill 輸出的是「審查報告文字」(不寫檔),所以斷言主要查 final_message
+# 的報告結構,以及流程是否照 SKILL.md 的 Step 走(讀 checklist + 讀範本)。
+# ============================================================================
+
+# --- Case 1: happy path — 審查一段有明顯問題的程式碼 -------------------------
+name: gcr-review-buggy-code
+skill: skills/google-code-reviewer-test
+load_strategy: progressive
+input: |
+  幫我做 google 規範 review。以下是 calc.py 的新增變更:
+
+  ```python
+  def div(a, b):
+      return a / b   # 沒有處理除以零
+
+  def calc(x):
+      r = div(x, 0)  # 命名不佳、且會炸
+      return r
+  ```
+
+  這個變更沒有附帶任何測試。
+runs: 5
+model: sonnet
+timeout_s: 600
+expect:
+  - exit_code: 0
+  # 流程層:驗「真的載入了 checklist 與報告範本」(SKILL.md Step 1 與 Step 6)
+  # 用 reads_file 查檔案路徑,不在意它是透過 Skill 工具還是直接 Read 載入的
+  - reads_file: [google-review-checklist, review-report-template]
+
+  # 結構層:報告必須含三個嚴重度分類 + 評分 + Top 3
+  # 用 output_contains:報告不管在訊息或檔案都掃得到(避免輸出位置假陽性)
+  - output_contains: ["Blocker", "Warning", "Nit", "評分", "Top 3"]
+
+  # 評分必須是 X / 10 的格式
+  - regex: "\\d+\\s*/\\s*10"
+
+  # 這段程式碼缺測試,依 skill 規定「缺測試必須列為 Blocker」
+  - output_contains: ["測試"]
+  # 語意層:用 --judge 啟用。criterion 描述「正確行為」,PASS=符合
+  - judge: "報告必須把『缺少對應測試』明確列為 Blocker(🔴 必須修正),而不是只放在 Warning 或 Nit。"
+
+# ============================================================================
+# Case 2: Nit 紀律 — 程式碼本身正確,只有微小風格問題
+# 測 skill 最容易犯的坑:不該把個人偏好/風格當成 Blocker,且 Nit 要加 "Nit:" 前綴
+# ============================================================================
+---
+name: gcr-nit-discipline
+skill: skills/google-code-reviewer-test
+load_strategy: progressive
+input: |
+  幫我 review 程式碼。以下是 utils.py 的變更,功能正確也有對應測試:
+
+  ```python
+  def add_two_numbers(first_number, second_number):
+      """Return the sum of two numbers."""
+      return first_number + second_number
+  ```
+
+  對應測試:
+  ```python
+  def test_add_two_numbers():
+      assert add_two_numbers(1, 2) == 3
+  ```
+  (你也可以認為命名稍長、可簡化,但這只是風格偏好)
+runs: 5
+model: sonnet
+timeout_s: 600
+expect:
+  - exit_code: 0
+  - tool_used: Read
+  # 若有提出風格建議,必須以 "Nit:" 標記(skill 的硬性規定)
+  # output_contains 會排除 skill 資料夾本身,所以不會誤掃到範本裡的 "Nit:"
+  - output_contains: ["Nit:"]
+  - regex: "\\d+\\s*/\\s*10"
+  # 語意層:確認沒有把純風格/命名偏好誤判成 Blocker 或 Warning(skill 的頭號陷阱)
+  - judge: "報告不得把純風格或命名偏好列為 Blocker 或 Warning;這類建議只能歸在 Nit。功能正確且有測試時,合併建議應為 LGTM。"

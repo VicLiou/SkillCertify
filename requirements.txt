@@ -1,0 +1,7 @@
+PyYAML>=6.0
+
+# Optional, depending on what you run:
+#   pytest        -- only if your testcases use `command: python -m pytest`
+#   pywinpty      -- required by the codex-tui adapter (Windows ConPTY)
+# pytest>=7
+# pywinpty>=2.0

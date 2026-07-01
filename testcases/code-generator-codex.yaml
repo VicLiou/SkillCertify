@@ -1,0 +1,46 @@
+# 生成類 skill 測試 — codex 專用版
+# 與 code-generator.yaml 的差異:
+#   1. 拿掉 reads_file(那是 Claude 的 Read 工具專用,codex 事件結構不同)
+#   2. 不寫死 model(用 --model 覆蓋,或留空用 codex 預設模型)
+#
+# 跑法(換成你那台實際的 codex 模型):
+#   skill-test testcases/code-generator-codex.yaml --adapter codex --model gpt-5.4 --runs 5 --allow-exec --trace trace.json
+#
+# 註:--judge 仍走 claude;那台沒裝 claude 就先別加 --judge。
+name: codegen-fizzbuzz-codex
+skill: skills/code-generator-test
+load_strategy: progressive
+input: |
+  實作一個 fizzbuzz 功能:
+  - 寫一個函式 fizzbuzz(n),回傳長度為 n 的字串列表,內容為 1..n 的 fizzbuzz
+    (3 的倍數→"Fizz"、5 的倍數→"Buzz"、15 的倍數→"FizzBuzz"、其餘→該數字的字串)。
+  - 實作寫在 fizzbuzz.py,pytest 測試寫在 test_fizzbuzz.py。
+runs: 5
+# codex-tui 在受管控機器上每次 shell 讀檔都要升權(由 adapter 的核准守望自動放行),
+# 開銷大、跑得慢,所以給足時間跑到 task_complete。
+timeout_s: 600
+# danger-full-access:拿掉 codex 的 sandbox 限制,讓 shell 能正常讀檔(解 access denied),
+# 且因為沒有「超出 sandbox」就不會觸發核准(避開雲端強制的 OnRequest 自動拒絕)。
+# 注意:這只改 sandbox、不碰 approval_policy,跟之前失敗的 bypass 不同。
+# ⚠️ 這會給 codex 的 shell 完整機器存取權,只在你信任的測試機跑。
+# 對照組:
+#   - workspace-write:codex shell 讀檔被擋 -> flail -> timeout(deliverable 仍正確)
+#   - bypass:雲端把 approval 強制回 OnRequest -> 寫檔被拒(不可用)
+sandbox: danger-full-access
+expect:
+  # 結果層(靜態,CLI 無關):指定的兩個檔都要產生在工作目錄
+  - exit_code: 0
+  - file_exists: fizzbuzz.py
+  - file_exists: test_fizzbuzz.py
+
+  # 動態層(核心,需 --allow-exec):產生的程式碼必須真的能跑、能過測試
+  - command:
+      run: "python -m pytest -q"
+      exit_code: 0
+  - command:
+      run: 'python -c "from fizzbuzz import fizzbuzz; r=fizzbuzz(15); assert r[-1]==''FizzBuzz''; assert r[0]==''1''; assert r[2]==''Fizz''; print(''OK'')"'
+      exit_code: 0
+      stdout_contains: ["OK"]
+
+  # 語意層(需 --judge,走 claude):邏輯正確性
+  - judge: "產生的 fizzbuzz 是否正確:15 的倍數回傳 'FizzBuzz'、3 的倍數 'Fizz'、5 的倍數 'Buzz'、其餘為數字字串?"

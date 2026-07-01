@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skill-auto-test"
+version = "0.1.0"
+description = "Deterministic stability testing for Anthropic-format AI skills"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# `pip install -e ".[codex-tui]"` if you want to drive codex's interactive TUI
+# on Windows. Not needed for claude / codex exec / codex-appserver.
+codex-tui = ["pywinpty>=2.0"]
+
+# `pip install -e ".[pytest]"` if your testcases use `command: python -m pytest`
+# to exercise generated code.
+pytest = ["pytest>=7"]
+
+# Convenience: install everything.
+all = ["pywinpty>=2.0", "pytest>=7"]
+
+[project.scripts]
+# Console script exposed after `pip install -e .`.
+skill-test = "runner.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["runner*"]
+exclude = ["tests*", "docs*", "tools*", "skills*", "testcases*", "fixtures*"]

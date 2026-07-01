@@ -1,0 +1,34 @@
+# 生成類 skill 測試 — 重點在「動態驗證」:產生的程式碼真的跑得起來、過得了測試
+# 跑法(注意要加 --allow-exec 才會執行 command,加 --judge 才會跑語意層):
+#   skill-test testcases/code-generator.yaml --adapter claude --allow-exec --judge --trace trace.json
+name: codegen-fizzbuzz
+skill: skills/code-generator-test
+load_strategy: progressive
+input: |
+  實作一個 fizzbuzz 功能:
+  - 寫一個函式 fizzbuzz(n),回傳長度為 n 的字串列表,內容為 1..n 的 fizzbuzz
+    (3 的倍數→"Fizz"、5 的倍數→"Buzz"、15 的倍數→"FizzBuzz"、其餘→該數字的字串)。
+  - 實作寫在 fizzbuzz.py,pytest 測試寫在 test_fizzbuzz.py。
+runs: 5
+model: sonnet
+timeout_s: 600
+expect:
+  # 結果層(靜態):指定的兩個檔都要產生
+  - exit_code: 0
+  - file_exists: fizzbuzz.py
+  - file_exists: test_fizzbuzz.py
+
+  # 流程層:確認有照協議載入規範
+  - reads_file: [conventions]
+
+  # 動態層(核心!需 --allow-exec):產生的程式碼必須真的能跑、能過測試
+  - command:
+      run: "python -m pytest -q"        # 跑 skill 自己產生的測試
+      exit_code: 0
+  - command:
+      run: 'python -c "from fizzbuzz import fizzbuzz; r=fizzbuzz(15); assert r[-1]==''FizzBuzz''; assert r[0]==''1''; assert r[2]==''Fizz''; print(''OK'')"'
+      exit_code: 0
+      stdout_contains: ["OK"]
+
+  # 語意層(需 --judge):邏輯正確性
+  - judge: "產生的 fizzbuzz 是否正確:15 的倍數回傳 'FizzBuzz'、3 的倍數 'Fizz'、5 的倍數 'Buzz'、其餘為數字字串?"

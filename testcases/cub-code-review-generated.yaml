@@ -1,0 +1,115 @@
+name: project-scope-review-only-finds-fixture-issue
+skill: 'D:/gitSpace/科技研發科/1.AI輔助開發/cub-mcp-prompt-setup/static-assets/.agents/skills/cub-code-review'
+fixture: 'fixtures\cub-code-review-sample'
+load_strategy: progressive
+runs: 5
+input: |-
+  請執行 CUB code review。
+
+  PROJECT_PATH: ./cub-code-review-sample
+  REVIEW_SCOPE: PROJECT
+
+  只審查 source code，不讀取規格書或 API 文件。請依 skill 的 review report template 輸出結果。
+expect:
+  - exit_code: 0
+  - output_contains:
+      - FAIL
+      - PROJECT_SCOPE_REVIEW_ONLY
+      - CustomerService.java
+---
+name: missing-review-scope-asks-for-required-choice
+skill: 'D:/gitSpace/科技研發科/1.AI輔助開發/cub-mcp-prompt-setup/static-assets/.agents/skills/cub-code-review'
+fixture: 'fixtures\cub-code-review-sample'
+load_strategy: progressive
+runs: 5
+input: |-
+  請幫我做 code review。
+
+  PROJECT_PATH: ./cub-code-review-sample
+expect:
+  - exit_code: 0
+  - output_contains:
+      - 請選擇 code review 範圍
+      - PROJECT
+      - COMMITTED_DIFF
+      - WORKTREE_UNCOMMITTED
+---
+name: spec-comparison-request-stops-at-skill-boundary
+skill: 'D:/gitSpace/科技研發科/1.AI輔助開發/cub-mcp-prompt-setup/static-assets/.agents/skills/cub-code-review'
+fixture: 'fixtures\cub-code-review-sample'
+load_strategy: progressive
+runs: 5
+input: |-
+  請 review 這個專案是否符合規格書。
+
+  PROJECT_PATH: ./cub-code-review-sample
+  REVIEW_SCOPE: PROJECT
+
+  請比對需求規格、API contract 或 .cub/specs 的內容；如果這超出 cub-code-review skill 邊界，請使用 MANDATORY STOP。
+expect:
+  - exit_code: 0
+  - output_contains:
+      - MANDATORY STOP
+      - code review
+      - 規格
+---
+name: committed-diff-missing-base-commit-stops
+skill: 'D:/gitSpace/科技研發科/1.AI輔助開發/cub-mcp-prompt-setup/static-assets/.agents/skills/cub-code-review'
+fixture: 'fixtures\cub-code-review-sample'
+load_strategy: progressive
+runs: 5
+input: |-
+  請審查已提交 diff。
+
+  PROJECT_PATH: ./cub-code-review-sample
+  REVIEW_SCOPE: DIFF
+  DIFF_SOURCE: COMMITTED_DIFF
+
+  我無法提供 BASE_COMMIT；若必要輸入缺少，請依 MANDATORY STOP template 回報，不要自行推斷 HEAD~1 或其他 commit。
+expect:
+  - exit_code: 0
+  - output_contains:
+      - MANDATORY STOP
+      - BASE_COMMIT
+      - COMMITTED_DIFF
+---
+name: committed-diff-empty-range-stops
+skill: 'D:/gitSpace/科技研發科/1.AI輔助開發/cub-mcp-prompt-setup/static-assets/.agents/skills/cub-code-review'
+fixture: 'fixtures\cub-code-review-sample'
+load_strategy: progressive
+runs: 5
+input: |-
+  請審查已提交 diff。
+
+  PROJECT_PATH: ./cub-code-review-sample
+  REVIEW_SCOPE: DIFF
+  DIFF_SOURCE: COMMITTED_DIFF
+  BASE_COMMIT: HEAD
+
+  只審查 BASE_COMMIT 到 HEAD 的 committed diff；如果 diff 為空，請依 MANDATORY STOP template 回報。
+expect:
+  - exit_code: 0
+  - output_contains:
+      - MANDATORY STOP
+      - BASE_COMMIT
+      - diff
+---
+name: worktree-uncommitted-missing-target-stops
+skill: 'D:/gitSpace/科技研發科/1.AI輔助開發/cub-mcp-prompt-setup/static-assets/.agents/skills/cub-code-review'
+fixture: 'fixtures\cub-code-review-sample'
+load_strategy: progressive
+runs: 5
+input: |-
+  請審查未 commit 的變更。
+
+  PROJECT_PATH: ./cub-code-review-sample
+  REVIEW_SCOPE: DIFF
+  DIFF_SOURCE: WORKTREE_UNCOMMITTED
+
+  我無法提供 UNCOMMITTED_TARGET；若必要輸入缺少，請依 MANDATORY STOP template 回報。
+expect:
+  - exit_code: 0
+  - output_contains:
+      - MANDATORY STOP
+      - UNCOMMITTED_TARGET
+      - WORKTREE_UNCOMMITTED

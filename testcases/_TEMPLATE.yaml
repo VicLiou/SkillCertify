@@ -1,0 +1,94 @@
+# ============================================================================
+# Testcase 範本 — 複製這個檔,改成你的 skill 測試
+#
+# 一個 YAML 文件 = 一個 testcase。用 "---" 分隔可在同一個檔放多個。
+# 跑法:  skill-test testcases/你的檔.yaml --adapter claude --trace trace.json
+# ============================================================================
+
+# --- 基本設定 ---------------------------------------------------------------
+name: my-skill-happy-path          # 測試名稱(報告會顯示)
+skill: skills/my-skill             # 指向 skill 資料夾(含 SKILL.md)
+
+# skill 怎麼餵給 CLI(這本身是個測試維度):
+#   flatten      整份 SKILL.md 塞進 prompt           → 「資訊全給」的上限
+#   progressive  只給 metadata + 檔案清單,讓它自己讀 → 最貼近真實(預設,建議)
+#   scripts-only 只列出 scripts/                      → 只測流程編排
+load_strategy: progressive
+
+# 使用者會怎麼叫這個 skill(用自然語言,模擬真實情境):
+input: |
+  用 my-skill 處理 <某件事>,並把結果寫到 out.txt
+
+runs: 20                           # 跑幾次測穩定性(穩定性看的就是 N 次的通過率)
+model: sonnet                      # 釘住模型才可重現;省略則用預設模型
+timeout_s: 300                     # 單次逾時秒數
+# sandbox: workspace-write         # codex 專用,claude 會忽略此欄
+# fixture: fixtures/sample-repo    # 輸入素材(待審 repo / diff / 規格檔),會複製進隔離 workdir;
+#                                  # skill 用 Glob/Read/Grep 去掃它。fixture 內容會自動從輸出掃描排除。
+
+# --- expect:怎樣算「符合預期」(重點!寫太鬆會假性通過)---------------------
+# expect 必填且不能空。每一條是一個檢查；建議每個 testcase 都明寫 exit_code。
+expect:
+  # 結果層 --------------------------------------------------------------
+  - exit_code: 0                   # CLI 結束碼必須是 0
+  - file_exists: out.txt           # workdir 裡必須生成這個檔
+  # - file_absent: error.log       # 這個檔「不該」出現(測沒有副作用)
+
+  # 文字內容層 ----------------------------------------------------------
+  - final_contains: ["done"]       # 最終訊息必須含這些字(list,全部都要中)
+  # - output_contains: ["merged"]  # 掃 最終訊息+stdout+模型產生的檔案(報告可能寫檔時用這個最穩)
+  # - stdout_contains: ["merged"]  # 整段輸出(含 trace)必須含這些字
+  # - regex: "\\d+ 個項目"          # 最終訊息/輸出要 match 這個正則
+
+  # 流程層(這是 pass/fail 看不到的那一層)----------------------------------
+  # - tool_used: Bash              # 過程中必須用過這個工具
+  #                                # Claude 工具名:Bash/Read/Write/Edit/Glob/Grep/Skill
+  # - reads_file: [checklist, template]    # 必須讀過路徑含這些字的檔(不管用 Skill 或直接 Read)
+  # - flow_contains: [Read, Bash, Write]   # 關鍵步驟(工具名)必須照順序出現
+  #                                # 注意:flow_contains 只看工具名,分不出讀哪個檔;要驗檔案用 reads_file
+
+  # 動態層(執行驗證,需跑時加 --allow-exec)--------------------------------
+  # 跑完後在 workdir 執行指令,驗證「產生的程式碼真的能跑」。會執行模型產生的程式碼!
+  # - command:
+  #     run: "python -m pytest -q"   # 要執行的指令
+  #     exit_code: 0                 # 預期結束碼(預設 0)
+  #     stdout_contains: ["passed"]  # 輸出須含(選用)
+  #     timeout_s: 60                # 逾時(選用)
+
+  # 效能層 --------------------------------------------------------------
+  # - max_latency_ms: 60000        # 單次不得超過 60 秒
+
+  # 語意層(需要 LLM 判斷,預設關閉;跑時加 --judge 才會生效)------------------
+  # criterion 請寫成「正確行為」的正向描述,PASS = 符合預期
+  # - judge: "最終訊息必須正確說明處理了幾個項目。"
+
+# ============================================================================
+# 第二個 testcase:邊界 / 異常輸入(測 skill 會不會優雅處理壞資料)
+# ============================================================================
+---
+name: my-skill-edge-empty-input
+skill: skills/my-skill
+load_strategy: progressive
+input: |
+  用 my-skill 處理一個空的輸入,看看會怎樣
+runs: 10
+model: sonnet
+expect:
+  - exit_code: 0                   # 即使輸入怪,也不該整個崩掉
+  - final_contains: ["無資料"]      # 應該要回報「沒東西可處理」之類
+
+# ============================================================================
+# 第三個 testcase:換句話說(測同一意圖、不同問法的觸發穩定性)
+# ============================================================================
+---
+name: my-skill-phrasing-variant
+skill: skills/my-skill
+load_strategy: progressive
+input: |
+  幫我把 <某件事> 弄好,結果存成 out.txt   # 跟第一個同意圖但講法不同
+runs: 10
+model: sonnet
+expect:
+  - exit_code: 0
+  - file_exists: out.txt
+  - final_contains: ["done"]

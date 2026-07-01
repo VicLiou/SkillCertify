@@ -1,0 +1,18 @@
+# One YAML doc = one testcase. Use --- to put several in one file.
+name: example-happy-path
+skill: skills/example-skill        # path to an Anthropic-format skill folder
+load_strategy: progressive          # flatten | progressive | scripts-only
+input: |
+  Use the skill to do <the thing> and write the result to out.txt
+runs: 10                            # run N times to measure stability
+model: gpt-5.4                      # pin for reproducibility (optional)
+sandbox: workspace-write            # read-only | workspace-write | danger-full-access
+timeout_s: 300
+expect:
+  - exit_code: 0
+  - file_exists: out.txt
+  - final_contains: ["done"]
+  # - tool_used: shell
+  # - regex: "\\d+ items processed"
+  # - max_latency_ms: 60000
+  # - judge: "does the final message correctly summarize what was produced?"
